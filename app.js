@@ -246,7 +246,15 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (dayOfWeek === 5) { // 5 is Friday
                 thClass = 'weekend-day';
             }
-            headHtml += `<th class="${thClass}">${i}<br><small>${dayNames[dayOfWeek]}</small></th>`;
+
+            const setterButtonsHtml = `
+                <div class="day-team-setter-container">
+                    <button class="btn btn-sm btn-outline-danger team-day-setter" data-day="${i}" data-team="A">A</button>
+                    <button class="btn btn-sm btn-outline-success team-day-setter" data-day="${i}" data-team="B">B</button>
+                </div>
+            `;
+
+            headHtml += `<th class="${thClass}">${i}<br><small>${dayNames[dayOfWeek]}</small>${setterButtonsHtml}</th>`;
         }
         headHtml += '</tr>';
         scheduleTableHead.innerHTML = headHtml;
@@ -268,7 +276,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <td class="employee-name-col">
                 <div class="d-flex justify-content-between align-items-center w-100">
                     <div>
-                        <span>${employee.name}</span>
+                        <span class="fw-bold">${employee.name}</span>
                         <small class="d-block employee-team-display ${teamColorClass}">${employee.team || ''}</small>
                     </div>
                     <span class="employee-actions">
@@ -300,13 +308,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 else if (schedule.status === 'Annual') selectedValue = 'leave';
                 else selectedValue = 'off';
 
+                let selectClass = '';
+                if (selectedValue === 'morning') {
+                    selectClass = 'status-morning';
+                } else if (selectedValue === 'evening') {
+                    selectClass = 'status-evening';
+                } else if (selectedValue === 'off') {
+                    selectClass = 'status-off-styled';
+                } else if (selectedValue === 'leave') {
+                    selectClass = 'status-leave';
+                }
+
                 const tdClass = dayOfWeek === 5 ? 'weekend-day' : ''; // 5 is Friday
                 const showOffReason = selectedValue === 'off';
                 const offReason = schedule.offReason || '';
 
                 bodyHtml += `
                     <td class="align-middle ${tdClass}">
-                        <select class="form-select status-select" data-employee-id="${employee.id}" data-day="${day}">
+                        <select class="form-select status-select ${selectClass}" data-employee-id="${employee.id}" data-day="${day}">
                             <option value="morning" ${selectedValue === 'morning' ? 'selected' : ''}>AM</option>
                             <option value="evening" ${selectedValue === 'evening' ? 'selected' : ''}>PM</option>
                             <option value="leave" ${selectedValue === 'leave' ? 'selected' : ''}>Annual</option>
@@ -450,6 +469,47 @@ document.addEventListener('DOMContentLoaded', () => {
                 saveScheduleBtn.disabled = false; // Re-enable button
             });
     }
+
+    /**
+     * Sets the shift for an entire day based on a selected team.
+     * Employees in the selected team are set to 'morning' with global times, others are set to 'off'.
+     * @param {number} day - The day of the month to set.
+     * @param {string} teamToSet - The team to set as working ('A' or 'B').
+     */
+    function setDayForTeam(day, teamToSet) {
+        const rows = scheduleTableBody.querySelectorAll('tr');
+
+        rows.forEach(row => {
+            // Find the team select dropdown for this employee
+            const teamSelect = row.querySelector('.team-select');
+            if (!teamSelect) return; // Skip if no team select found (e.g., header row)
+
+            const employeeTeam = teamSelect.value; // e.g., "Team A"
+
+            // Find the status select for the specific day
+            const shiftSelect = row.querySelector(`select.status-select[data-day='${day}']`);
+            if (!shiftSelect) return;
+
+            const parentTd = shiftSelect.closest('td');
+            const startTimeInput = parentTd.querySelector('input[name="startTime"]');
+            const endTimeInput = parentTd.querySelector('input[name="endTime"]');
+
+            // Check if the employee's team is the one to be set for work
+            if (employeeTeam === `Team ${teamToSet}`) {
+                shiftSelect.value = 'morning';
+                // Clear individual time inputs to ensure global times are used on save
+                if (startTimeInput) startTimeInput.value = '';
+                if (endTimeInput) endTimeInput.value = '';
+            } else {
+                shiftSelect.value = 'off';
+            }
+
+            // Trigger the 'change' event to update the UI (e.g., show/hide time inputs)
+            shiftSelect.dispatchEvent(new Event('change'));
+        });
+
+        console.log(`تم ضبط ورديات يوم ${day} لفريق ${teamToSet} بالتوقيت العام.`);
+    }
     // Event delegation for showing/hiding time inputs in the modal
     scheduleTableBody.addEventListener('change', (e) => {
         if (e.target.classList.contains('status-select')) {
@@ -457,6 +517,18 @@ document.addEventListener('DOMContentLoaded', () => {
             const parentTd = select.closest('td');
             const timeWrapper = parentTd.querySelector('.time-input-wrapper');
             const offReasonWrapper = parentTd.querySelector('.off-reason-wrapper');
+
+            // Add/remove styling classes for 'AM', 'PM', 'OFF', and 'Annual'
+            select.classList.remove('status-morning', 'status-evening', 'status-off-styled', 'status-leave');
+            if (select.value === 'morning') {
+                select.classList.add('status-morning');
+            } else if (select.value === 'evening') {
+                select.classList.add('status-evening');
+            } else if (select.value === 'off') {
+                select.classList.add('status-off-styled');
+            } else if (select.value === 'leave') {
+                select.classList.add('status-leave');
+            }
 
             const isWorkShift = select.value === 'morning' || select.value === 'evening';
             const isOff = select.value === 'off';
@@ -487,6 +559,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 else if (team === 'Team B') teamDisplay.classList.add('text-success');
                 else if (team === 'Regular') teamDisplay.classList.add('text-primary');
             }
+        }
+    });
+
+    // Event delegation for team day setters in the modal header
+    scheduleTableHead.addEventListener('click', (e) => {
+        const setterBtn = e.target.closest('.team-day-setter');
+        if (setterBtn) {
+            const day = setterBtn.dataset.day;
+            const teamToSet = setterBtn.dataset.team;
+            setDayForTeam(parseInt(day), teamToSet);
         }
     });
 

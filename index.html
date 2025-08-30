@@ -164,7 +164,7 @@
         position: sticky;
         right: 0; /* For RTL */
         background-color: #f8f9fa;
-        min-width: 160px !important; /* Increased width for actions */
+        min-width: 140px !important; /* Adjusted width */
       }
       .employee-actions {
         opacity: 0;
@@ -184,14 +184,14 @@
       .schedule-table th.team-col,
       .schedule-table td.team-col {
         position: sticky;
-        right: 160px; /* Width of the name column */
+        right: 140px; /* Width of the name column */
         background-color: #f8f9fa;
         min-width: 110px !important;
       }
       .schedule-table th.e-signature-col,
       .schedule-table td.e-signature-col {
         position: sticky;
-        right: 270px; /* Width of name + team column */
+        right: 250px; /* Width of name (140) + team (110) column */
         background-color: #f8f9fa;
         min-width: 120px !important;
       }
@@ -211,6 +211,28 @@
         padding: 0.15rem; /* Further reduced padding */
         margin-bottom: 4px;
       }
+      /* Custom styling for status dropdowns */
+      .schedule-table .form-select.status-morning {
+        background-color: #d1e7dd !important; /* Light green (Bootstrap's success-subtle) */
+        color: #0f5132 !important; /* Dark green (Bootstrap's success text) */
+        font-weight: bold;
+      }
+      .schedule-table .form-select.status-evening {
+        background-color: #f8d7da !important; /* Light red (Bootstrap's danger-subtle) */
+        color: #842029 !important; /* Dark red (Bootstrap's danger text) */
+        font-weight: bold;
+      }
+      .schedule-table .form-select.status-off-styled {
+        background-color: #fff3cd !important; /* Light yellow (Bootstrap's warning-subtle) */
+        color: #664d03 !important; /* Dark yellow (Bootstrap's warning text) */
+        font-weight: bold;
+      }
+      .schedule-table .form-select.status-leave {
+        background-color: #cff4fc !important; /* Light blue (Bootstrap's info-subtle) */
+        color: #055160 !important; /* Dark blue (Bootstrap's info text) */
+        font-weight: bold;
+      }
+
       .time-input-wrapper {
         display: flex;
         gap: 4px;
@@ -238,7 +260,7 @@
       /* Adjust sticky position when team column is hidden */
       .schedule-table.hide-team th.e-signature-col,
       .schedule-table.hide-team td.e-signature-col {
-        right: 160px; /* Width of name column only */
+        right: 140px; /* Width of name column only */
       }
       /* Employee Calendar Modal Styles */
       .calendar-grid {
@@ -305,6 +327,21 @@
       }
       .shift-info.off {
         background-color: #6c757d;
+      }
+
+      /* Styles for Team Day Setters */
+      .day-team-setter-container {
+        display: flex;
+        justify-content: center;
+        gap: 5px;
+        margin-top: 5px;
+      }
+      .team-day-setter {
+        padding: 0.1rem 0.4rem;
+        font-size: 0.65rem;
+        line-height: 1;
+        border-radius: 4px;
+        width: 22px; /* For consistent width */
       }
 
       /* Forcing dropdown arrows to the left in settings modal */
