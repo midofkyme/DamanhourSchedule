@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Schedule</title>
+    <!-- Bootstrap CSS -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <!-- Bootstrap Icons for the gear icon -->
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        background-color: #e9ecef; /* A lighter grey */
+      }
+      .app-header {
+        background-color: #0d6efd;
+        color: white;
+        padding: 1rem;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .app-header .text-center {
+        flex-grow: 1;
+      }
+      .app-header .settings-btn,
+      .app-header div:first-child {
+        flex-basis: 50px; /* Give space for the icon */
+        flex-shrink: 0;
+      }
+      .settings-btn {
+        font-size: 1.5rem;
+        color: white;
+        cursor: pointer;
+      }
+      .employee-card {
+        position: relative; /* Required for absolute positioning of child */
+        border-radius: 15px;
+        border: 1px solid #ddd; /* Default border for other sides */
+        border-right-width: 5px; /* Make the right border thicker */
+        transition: all 0.2s ease-in-out;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        cursor: pointer;
+      }
+      .employee-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      }
+
+      .status-working {
+        border-right-color: #198754; /* Green */
+      }
+
+      .status-off {
+        border-right-color: #6c757d; /* Grey */
+      }
+
+      .card-body {
+        padding: 1.25rem;
+      }
+      .employee-name {
+        font-weight: bold;
+        font-size: 1.2rem;
+        margin-bottom: 0.75rem !important;
+      }
+
+      .shift-badge {
+        display: inline-block;
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        font-weight: 500;
+        color: white;
+        font-size: 1rem;
+      }
+      .shift-morning {
+        background-color: #198754;
+      }
+      .shift-evening {
+        background-color: #dc3545;
+      }
+      .shift-leave {
+        background-color: #ffc107;
+        color: #333 !important;
+      }
+      .shift-off {
+        background-color: #6c757d;
+      }
+      .shift-custom-off {
+        background-color: #fd7e14; /* Bootstrap orange */
+      }
+      .shift-time {
+        font-size: 0.9rem;
+        color: #495057;
+        margin-top: 0.5rem;
+        font-weight: 500;
+      }
+      .team-indicator {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        padding: 0.2rem 0.6rem;
+        border-radius: 5px;
+        color: white;
+        font-size: 0.8rem;
+        font-weight: bold;
+      }
+      .signature-indicator {
+        position: absolute;
+        bottom: 10px;
+        right: 10px;
+        width: 28px;
+        height: 28px;
+        border-radius: 5px;
+        background-color: #6c757d; /* Grey */
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.8rem;
+        font-weight: bold;
+      }
+      .team-a {
+        background-color: #dc3545;
+      } /* red */
+      .team-b {
+        background-color: #198754;
+      } /* green */
+      .team-regular {
+        background-color: #0d6efd;
+      } /* blue */
+
+      /* Modal styles */
+      .modal-header .modal-title {
+        font-size: 1.1rem;
+      }
+      .schedule-table {
+        font-size: 0.7rem; /* Further reduced font size */
+      }
+      .schedule-table th,
+      .schedule-table td {
+        text-align: center;
+        vertical-align: middle;
+        min-width: 70px; /* Further reduced min-width */
+      }
+      .schedule-table thead th {
+        position: sticky;
+        top: 0;
+        z-index: 2; /* Must be above sticky body columns */
+        background-color: #f8f9fa; /* Match other sticky backgrounds */
+      }
+      .schedule-table .weekend-day {
+        background-color: #fcf8e3 !important; /* A light yellow for weekends. !important ensures it overrides other styles. */
+      }
+      .schedule-table th.employee-name-col,
+      .schedule-table td.employee-name-col {
+        position: sticky;
+        right: 0; /* For RTL */
+        background-color: #f8f9fa;
+        min-width: 160px !important; /* Increased width for actions */
+      }
+      .employee-actions {
+        opacity: 0;
+        transition: opacity 0.2s ease-in-out;
+      }
+      .schedule-table tr:hover .employee-actions {
+        opacity: 1;
+      }
+      .employee-team-display {
+        font-size: 0.75em; /* تصغير حجم الخط */
+        font-weight: bold;
+        text-align: right; /* محاذاة لليمين */
+      }
+      .employee-actions i {
+        cursor: pointer;
+      }
+      .schedule-table th.team-col,
+      .schedule-table td.team-col {
+        position: sticky;
+        right: 160px; /* Width of the name column */
+        background-color: #f8f9fa;
+        min-width: 110px !important;
+      }
+      .schedule-table th.e-signature-col,
+      .schedule-table td.e-signature-col {
+        position: sticky;
+        right: 270px; /* Width of name + team column */
+        background-color: #f8f9fa;
+        min-width: 120px !important;
+      }
+      /* Z-index for sticky columns */
+      .schedule-table td.employee-name-col,
+      .schedule-table td.team-col,
+      .schedule-table td.e-signature-col {
+        z-index: 1;
+      }
+      .schedule-table th.employee-name-col,
+      .schedule-table th.team-col,
+      .schedule-table th.e-signature-col {
+        z-index: 3; /* Must be on top of other header cells */
+      }
+      .schedule-table .form-select {
+        font-size: 0.7rem; /* Further reduced font size */
+        padding: 0.15rem; /* Further reduced padding */
+        margin-bottom: 4px;
+      }
+      .time-input-wrapper {
+        display: flex;
+        gap: 4px;
+        align-items: center;
+        justify-content: center;
+        margin-top: 4px;
+      }
+      .time-input-wrapper input[type="time"] {
+        padding: 0.1rem 0.2rem;
+        font-size: 0.7rem; /* Added font-size reduction */
+      }
+      .off-reason-wrapper {
+        margin-top: 4px;
+      }
+      .off-reason-wrapper .form-select {
+        font-size: 0.7rem; /* Further reduced font size */
+      }
+      /* Column visibility styles */
+      .schedule-table.hide-team .team-col {
+        display: none;
+      }
+      .schedule-table.hide-signature .e-signature-col {
+        display: none;
+      }
+      /* Adjust sticky position when team column is hidden */
+      .schedule-table.hide-team th.e-signature-col,
+      .schedule-table.hide-team td.e-signature-col {
+        right: 160px; /* Width of name column only */
+      }
+      /* Employee Calendar Modal Styles */
+      .calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 5px;
+        text-align: center;
+      }
+      .calendar-header,
+      .calendar-day {
+        padding: 10px;
+        border-radius: 5px;
+      }
+      .calendar-header {
+        background-color: #f8f9fa;
+        font-weight: bold;
+      }
+      .calendar-day {
+        border: 1px solid #e9ecef;
+        min-height: 80px;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        align-items: center;
+        padding: 5px;
+      }
+      .calendar-day .day-number {
+        font-weight: bold;
+        margin-bottom: 5px;
+      }
+      .calendar-day.is-today {
+        background-color: #e0f7fa;
+        border-color: #007bff;
+      }
+      .calendar-day.is-working {
+        background-color: #d4edda;
+      }
+      .calendar-day.is-leave {
+        background-color: #fff3cd;
+      }
+      .calendar-day.is-off {
+        background-color: #f8f9fa;
+      }
+      .calendar-day.is-other-month {
+        color: #adb5bd;
+        background-color: #fdfdfd;
+      }
+      .calendar-day .shift-info {
+        font-size: 0.8em;
+        padding: 2px 5px;
+        border-radius: 3px;
+        color: white;
+        margin-top: 2px;
+      }
+      .shift-info.morning {
+        background-color: #198754;
+      }
+      .shift-info.evening {
+        background-color: #dc3545;
+      }
+      .shift-info.leave {
+        background-color: #ffc107;
+        color: #333 !important;
+      }
+      .shift-info.off {
+        background-color: #6c757d;
+      }
+
+      /* Forcing dropdown arrows to the left in settings modal */
+      #settingsModal .form-select {
+        background-position: left 0.75rem center !important;
+      }
+
+      /* Force modal close button to the left for RTL layout */
+      .modal-header .btn-close {
+        margin-left: 0 !important;
+      }
+
+      #settingsModal .table-responsive {
+        /* This makes the table container scrollable on its own,
+           which allows sticky headers/columns to work correctly within it.
+           It may create a nested scrollbar, but it's a working solution. */
+        overflow: auto;
+        max-height: 70vh; /* Adjust this value as needed */
+      }
+
+      /* Responsive Card for Mobile */
+      @media (max-width: 576px) {
+        .employee-card .card-body {
+          padding: 0.75rem;
+        }
+        .employee-card .employee-name {
+          font-size: 1rem;
+        }
+        .employee-card .shift-badge {
+          font-size: 0.8rem;
+          padding: 0.4rem 0.8rem;
+        }
+        .employee-card .shift-time {
+          font-size: 0.8rem;
+        }
+        .team-indicator {
+          font-size: 0.7rem;
+          padding: 0.15rem 0.4rem;
+        }
+        .signature-indicator {
+          width: 24px;
+          height: 24px;
+          font-size: 0.7rem;
+        }
+      }
+      /* Responsive Calendar for Mobile */
+      @media (max-width: 767.98px) {
+        .calendar-header {
+          padding: 8px 2px;
+          font-size: 0.7rem;
+        }
+        .calendar-day {
+          min-height: 65px;
+          padding: 4px 2px;
+        }
+        .calendar-day .day-number {
+          font-size: 0.85rem;
+          margin-bottom: 3px;
+        }
+        .calendar-day .shift-info {
+          font-size: 0.7em;
+          padding: 2px 4px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="app-header sticky-top">
+      <button
+        type="button"
+        class="btn btn-outline-light"
+        id="main-prev-day-btn"
+      >
+        &lt;
+      </button>
+      <div class="text-center">
+        <h1 class="h4 mb-1">Damanhour CSO Schedule</h1>
+        <p id="current-date" class="mb-0 small"></p>
+      </div>
+      <button
+        type="button"
+        class="btn btn-outline-light"
+        id="main-next-day-btn"
+      >
+        &gt;
+      </button>
+      <i
+        class="bi bi-gear-fill settings-btn me-3"
+        data-bs-toggle="modal"
+        data-bs-target="#settingsModal"
+      ></i>
+    </header>
+
+    <main class="container py-4">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="h5 mb-0 text-success">Agents Per Day</h2>
+        <span id="holiday-name-display" class="badge bg-info text-dark"></span>
+      </div>
+      <div id="working-employees-list" class="row">
+        <div class="col-12">
+          <div class="text-center p-4">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">جاري تحميل البيانات...</p>
+          </div>
+        </div>
+      </div>
+
+      <hr class="my-4" />
+
+      <h2 class="h5 mb-3 text-muted">OFF</h2>
+      <div id="off-employees-list" class="row">
+        <!-- سيتم ملء كروت الموظفين في إجازة هنا -->
+      </div>
+    </main>
+
+    <!-- Employee Calendar Modal -->
+    <div
+      class="modal fade"
+      id="employeeCalendarModal"
+      tabindex="-1"
+      aria-labelledby="employeeCalendarModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="employeeCalendarModalLabel">
+              جدول الموظف
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <div id="employee-calendar-view" class="calendar-grid">
+              <!-- Calendar will be generated here by JS -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div
+      class="modal fade"
+      id="settingsModal"
+      tabindex="-1"
+      aria-labelledby="settingsModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content">
+          <div class="modal-header">
+            <button
+              type="button"
+              class="btn btn-outline-secondary"
+              id="prev-month-btn"
+            >
+              &lt;
+            </button>
+            <h5 class="modal-title mx-auto" id="settingsModalLabel">
+              <!-- Month and Year will be inserted here by JS -->
+            </h5>
+            <button
+              type="button"
+              class="btn btn-outline-secondary me-3"
+              id="next-month-btn"
+            >
+              &gt;
+            </button>
+          </div>
+          <div class="modal-body">
+              <div class="row mb-3 p-2 bg-light rounded border">
+                <div class="col-md-6 mb-2 mb-md-0">
+                  <label class="form-label fw-bold"
+                    >توقيت الدوام الصباحي (عام)</label
+                  >
+                  <div class="input-group">
+                    <span class="input-group-text">من</span>
+                    <input
+                      type="time"
+                      id="global-morning-start"
+                      class="form-control"
+                      value="09:00"
+                    />
+                    <span class="input-group-text">إلى</span>
+                    <input
+                      type="time"
+                      id="global-morning-end"
+                      class="form-control"
+                      value="17:00"
+                    />
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label fw-bold"
+                    >توقيت الدوام المسائي (عام)</label
+                  >
+                  <div class="input-group">
+                    <span class="input-group-text">من</span>
+                    <input
+                      type="time"
+                      id="global-evening-start"
+                      class="form-control"
+                      value="17:00"
+                    />
+                    <span class="input-group-text">إلى</span>
+                    <input
+                      type="time"
+                      id="global-evening-end"
+                      class="form-control"
+                      value="01:00"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div class="row mb-3 p-2 bg-light rounded border">
+                <div class="col-12">
+                  <label class="form-label fw-bold">الإجازات الرسمية للشهر</label>
+                  <div class="input-group">
+                    <select class="form-select" id="holiday-day-select" style="max-width: 120px;">
+                      <!-- الأيام سيتم إضافتها هنا بواسطة JS -->
+                    </select>
+                    <input type="text" id="official-holiday-input" class="form-control" placeholder="أدخل اسم الإجازة هنا" />
+                  </div>
+                  <div class="form-text">اختر يوماً من القائمة وأدخل اسم الإجازة. لحذف إجازة، اختر اليوم وامسح اسم الإجازة.</div>
+                </div>
+              </div>
+
+              <div class="row mb-3 p-2 bg-light rounded border">
+                <div class="col-12">
+                  <label class="form-label fw-bold">إعدادات عرض الأعمدة</label>
+                  <div class="form-check form-check-inline">
+                    <input
+                      class="form-check-input"
+                      type="checkbox"
+                      id="toggle-team-column"
+                    />
+                    <label class="form-check-label" for="toggle-team-column"
+                      >إظهار عمود الفريق</label
+                    >
+                  </div>
+                  <div class="form-check form-check-inline">
+                    <input
+                      class="form-check-input"
+                      type="checkbox"
+                      id="toggle-signature-column"
+                    />
+                    <label class="form-check-label" for="toggle-signature-column"
+                      >إظهار عمود التوقيع</label
+                    >
+                  </div>
+                </div>
+              </div>
+
+              <div class="d-flex justify-content-end mb-3">
+                <button class="btn btn-success" id="add-employee-btn">
+                  <i class="bi bi-plus-circle"></i> إضافة موظف جديد
+                </button>
+              </div>
+
+              <p class="text-muted small">
+                ملاحظة: يمكنك تحديد وقت مخصص لكل وردية، أو ترك الحقول فارغة لتطبيق
+                التوقيت العام.
+                <strong class="text-primary d-block"
+                  >اليوم الحالي مميز باللون الأزرق.</strong
+                >
+                <strong class="text-info d-block"
+                  >للتعديل او الحذف اضغط على اسم الموظف</strong
+                >
+              </p>
+
+              <div class="table-responsive">
+              <table
+                class="table table-bordered schedule-table"
+                id="schedule-table"
+              >
+                <thead id="schedule-table-head">
+                  <!-- Header will be generated by JS -->
+                </thead>
+                <tbody id="schedule-table-body">
+                  <!-- Schedule rows will be generated by JS -->
+                </tbody>
+              </table>
+              </div>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              إغلاق
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              id="save-schedule-btn"
+            >
+              حفظ التغييرات
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Employee Add/Edit Modal -->
+    <div
+      class="modal fade"
+      id="employeeCrudModal"
+      tabindex="-1"
+      aria-labelledby="employeeCrudModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="employeeCrudModalLabel">إضافة موظف</h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <form id="employee-form">
+              <input type="hidden" id="employee-id-input" />
+              <div class="mb-3">
+                <label for="employee-name-input" class="form-label"
+                  >اسم الموظف</label
+                >
+                <input
+                  type="text"
+                  class="form-control"
+                  id="employee-name-input"
+                  required
+                />
+              </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              إلغاء
+            </button>
+            <button
+              type="submit"
+              class="btn btn-primary"
+              form="employee-form"
+              id="save-employee-btn"
+            >
+              حفظ
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+    <!-- Bootstrap and App JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
