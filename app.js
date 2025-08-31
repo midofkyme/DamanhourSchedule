@@ -16,6 +16,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     let employees = [];
+    let originalEmployees = []; // For tracking changes
+    let originalHolidays = {}; // For tracking changes
     let holidays = {}; // To store official holidays { 'YYYY-MM-DD': 'Holiday Name' }
     const today = new Date();
     let mainDisplayedDate = new Date(); // State for the currently viewed day on the main page
@@ -52,6 +54,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const daySummaryModalLabel = document.getElementById('daySummaryModalLabel');
     const daySummaryBody = document.getElementById('daySummaryBody');
 
+    const historyModalEl = document.getElementById('historyModal');
+    const historyModal = new bootstrap.Modal(historyModalEl);
+    const historyModalBody = document.getElementById('historyModalBody');
+    const showHistoryBtn = document.getElementById('show-history-btn');
+
+
     const statusMap = { 'morning': { status: 'Working', shift: 'AM' }, 'evening': { status: 'Working', shift: 'PM' }, 'leave': { status: 'Annual', shift: null }, 'off': { status: 'OFF', shift: null } };
 
     function getYYYYMMDD(date) {
@@ -79,11 +87,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 const employeesData = employeesSnapshot.val();
                 if (employeesData) {
                     employees = Array.isArray(employeesData) ? employeesData.filter(Boolean) : Object.values(employeesData);
+                    originalEmployees = JSON.parse(JSON.stringify(employees)); // Deep copy for change tracking
                 } else {
                     employees = [];
+                    originalEmployees = [];
                 }
 
                 holidays = holidaysSnapshot.val() || {}; // Get holidays or default to empty object
+                originalHolidays = JSON.parse(JSON.stringify(holidays)); // Deep copy for change tracking
 
                 renderScheduleModal();
                 updateColumnVisibility();
@@ -375,82 +386,67 @@ document.addEventListener('DOMContentLoaded', () => {
         holidayInput.value = holidays[firstDayKey] || '';
     }
 
+    function logChange(description) {
+        if (!description || description.trim() === '') return Promise.resolve();
+
+        const historyRef = database.ref('history');
+        const newLogEntry = {
+            timestamp: firebase.database.ServerValue.TIMESTAMP, // Use server timestamp for consistency
+            description: description
+        };
+        return historyRef.push(newLogEntry); // push() returns a promise-like object (a Thenable)
+    }
+
     function saveScheduleChanges() {
         saveScheduleBtn.disabled = true; // Disable button to prevent multiple clicks
-        const savePromises = [];
 
-        // --- 1. Prepare Holiday Data ---
-        const holidayName = holidayInput.value.trim();
-        const selectedDay = holidayDaySelect.value;
+        // --- 1. GATHER ALL DATA FROM FORM and UPDATE LOCAL STATE ---
         const year = displayedDate.getFullYear();
         const month = displayedDate.getMonth();
-        const dateKey = getYYYYMMDD(new Date(year, month, selectedDay));
-        const holidayRef = database.ref(`holidays/${dateKey}`);
 
-        if (holidayName) {
-            savePromises.push(holidayRef.set(holidayName));
-            holidays[dateKey] = holidayName; // Update local state
-        } else if (holidays[dateKey]) { // Only remove if it exists
-            savePromises.push(holidayRef.remove());
-            delete holidays[dateKey]; // Update local state
+        // Safeguard: Explicitly update the holiday for the currently selected day one last time.
+        // This ensures the very last change is captured before saving, in case of any event timing issue.
+        const lastChangedDay = holidayDaySelect.value;
+        const lastChangedDateKey = getYYYYMMDD(new Date(year, month, parseInt(lastChangedDay)));
+        const lastChangedHolidayName = holidayInput.value.trim();
+        if (lastChangedHolidayName) {
+            holidays[lastChangedDateKey] = lastChangedHolidayName;
+        } else {
+            // Ensure we only delete if it was a pre-existing key that is now empty
+            if (holidays.hasOwnProperty(lastChangedDateKey)) {
+                delete holidays[lastChangedDateKey];
+            }
         }
 
-        // --- 2. Prepare Employee Data ---
+        // Gather global times
         const globalMorningStart = document.getElementById('global-morning-start').value;
         const globalMorningEnd = document.getElementById('global-morning-end').value;
         const globalEveningStart = document.getElementById('global-evening-start').value;
         const globalEveningEnd = document.getElementById('global-evening-end').value;
 
-        // Update e-signatures
-        const signatureSelects = scheduleTableBody.querySelectorAll('.e-signature-select');
-        signatureSelects.forEach(select => {
-            const employeeId = parseInt(select.dataset.employeeId);
+        // Update all employee properties from the form
+        scheduleTableBody.querySelectorAll('tr').forEach(row => {
+            const employeeId = parseInt(row.querySelector('.team-select')?.dataset.employeeId);
+            if (!employeeId) return;
             const employee = employees.find(emp => emp.id === employeeId);
-            if (employee) {
-                employee.eSignature = select.value;
-            }
-        });
+            if (!employee) return;
 
-        // First, update teams from their specific dropdowns
-        const teamSelects = scheduleTableBody.querySelectorAll('.team-select');
-        teamSelects.forEach(select => {
-            const employeeId = parseInt(select.dataset.employeeId);
-            const employee = employees.find(emp => emp.id === employeeId);
-            if (employee) {
-                employee.team = select.value;
-            }
-        });
+            employee.team = row.querySelector('.team-select').value;
+            employee.employeeType = row.querySelector('.employee-type-select').value;
+            employee.eSignature = row.querySelector('.e-signature-select').value;
 
-        // Update employee types
-        const employeeTypeSelects = scheduleTableBody.querySelectorAll('.employee-type-select');
-        employeeTypeSelects.forEach(select => {
-            const employeeId = parseInt(select.dataset.employeeId);
-            const employee = employees.find(emp => emp.id === employeeId);
-            if (employee) {
-                employee.employeeType = select.value;
-            }
-        });
+            row.querySelectorAll('.status-select').forEach(select => {
+                const day = select.dataset.day;
+                const selectedType = select.value;
+                const parentTd = select.closest('td');
+                const individualStartTime = parentTd.querySelector('input[name="startTime"]').value;
+                const individualEndTime = parentTd.querySelector('input[name="endTime"]').value;
+                const offReason = parentTd.querySelector('.off-reason-select')?.value || null;
 
-        const selects = scheduleTableBody.querySelectorAll('.status-select');
-        selects.forEach(select => {
-            const employeeId = parseInt(select.dataset.employeeId);
-            const day = select.dataset.day;
-            const selectedType = select.value;
-
-            const parentTd = select.closest('td');
-            const individualStartTime = parentTd.querySelector('input[name="startTime"]').value;
-            const individualEndTime = parentTd.querySelector('input[name="endTime"]').value;
-            const offReasonSelect = parentTd.querySelector('.off-reason-select');
-            const offReason = offReasonSelect ? offReasonSelect.value : null;
-
-            const employee = employees.find(emp => emp.id === employeeId);
-            if (employee) {
                 const newSchedule = { ...statusMap[selectedType] };
-                // Clear offReason unless it's an 'off' day
                 newSchedule.offReason = null;
 
                 if (selectedType === 'morning') {
-                    // Use individual time if available, otherwise fall back to global
                     newSchedule.startTime = individualStartTime || globalMorningStart || null;
                     newSchedule.endTime = individualEndTime || globalMorningEnd || null;
                 } else if (selectedType === 'evening') {
@@ -460,32 +456,123 @@ document.addEventListener('DOMContentLoaded', () => {
                     newSchedule.offReason = offReason;
                     newSchedule.startTime = null;
                     newSchedule.endTime = null;
-                } else {
+                } else { // leave
                     newSchedule.startTime = null;
                     newSchedule.endTime = null;
                 }
-                // Update the in-memory schedule object
                 employee.schedule[day] = newSchedule;
+            });
+        });
+
+        // --- 2. DIFF and GENERATE CHANGE DESCRIPTIONS ---
+        const changes = [];
+
+        // Employee additions, deletions, and modifications
+        const addedEmployees = employees.filter(newEmp => !originalEmployees.some(oldEmp => oldEmp.id === newEmp.id));
+        addedEmployees.forEach(emp => changes.push(`تمت إضافة موظف جديد: ${emp.name}`));
+
+        const deletedEmployees = originalEmployees.filter(oldEmp => !employees.some(newEmp => newEmp.id === oldEmp.id));
+        deletedEmployees.forEach(emp => changes.push(`تم حذف الموظف: ${emp.name}`));
+
+        const existingEmployees = employees.filter(newEmp => originalEmployees.some(oldEmp => oldEmp.id === newEmp.id));
+        existingEmployees.forEach(newEmp => {
+            const oldEmp = originalEmployees.find(e => e.id === newEmp.id);
+            if (!oldEmp) return;
+
+            if (newEmp.name !== oldEmp.name) changes.push(`تم تغيير اسم الموظف من "${oldEmp.name}" إلى "${newEmp.name}"`);
+            if (newEmp.team !== oldEmp.team) changes.push(`تم تغيير فريق ${newEmp.name} من "${oldEmp.team || 'N/A'}" إلى "${newEmp.team}"`);
+            if (newEmp.employeeType !== oldEmp.employeeType) changes.push(`تم تغيير نوع ${newEmp.name} من "${oldEmp.employeeType || 'N/A'}" إلى "${newEmp.employeeType}"`);
+            if (newEmp.eSignature !== oldEmp.eSignature) changes.push(`تم تغيير حالة التوقيع الإلكتروني لـ ${newEmp.name} من "${oldEmp.eSignature}" إلى "${newEmp.eSignature}"`);
+
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            for (let day = 1; day <= daysInMonth; day++) {
+                if (JSON.stringify(oldEmp.schedule[day] || {}) !== JSON.stringify(newEmp.schedule[day] || {})) {
+                    const getStatusText = s => (s.status === 'Working' ? s.shift : (s.status === 'Annual' ? 'Annual' : (s.offReason || 'OFF')));
+                    changes.push(`تم تحديث جدول ${newEmp.name} ليوم ${day}: من (${getStatusText(oldEmp.schedule[day] || { status: 'OFF' })}) إلى (${getStatusText(newEmp.schedule[day] || { status: 'OFF' })})`);
+                }
             }
         });
 
-        // Add the employee data save operation to the promises array
-        savePromises.push(database.ref('employees').set(employees));
+        // Holiday changes for the entire month
+        const daysInMonthForHolidays = new Date(year, month + 1, 0).getDate();
+        for (let day = 1; day <= daysInMonthForHolidays; day++) {
+            const dateKey = getYYYYMMDD(new Date(year, month, day));
+            const oldHoliday = originalHolidays[dateKey];
+            const newHoliday = holidays[dateKey];
 
-        // --- 3. Execute all save operations ---
+            if (oldHoliday !== newHoliday) {
+                if (newHoliday && !oldHoliday) { // Added
+                    changes.push(`تم تحديد يوم ${day} كإجازة رسمية: "${newHoliday}"`);
+                } else if (!newHoliday && oldHoliday) { // Removed
+                    changes.push(`تمت إزالة الإجازة الرسمية ليوم ${day} ("${oldHoliday}")`);
+                } else if (newHoliday && oldHoliday) { // Modified
+                    changes.push(`تم تعديل إجازة يوم ${day} من "${oldHoliday}" إلى "${newHoliday}"`);
+                }
+            }
+        }
+
+        // --- 3. EXECUTE ALL SAVE OPERATIONS ---
+        if (changes.length === 0) {
+            alert("لم يتم اكتشاف أي تغييرات للحفظ.");
+            saveScheduleBtn.disabled = false;
+            return;
+        }
+
+        const savePromises = [];
+        const fullDescription = `تحديثات لشهر ${displayedDate.toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' })}:\n- ${changes.join('\n- ')}`;
+        savePromises.push(logChange(fullDescription));
+        savePromises.push(database.ref('employees').set(employees));
+        savePromises.push(database.ref('holidays').set(holidays));
+
         Promise.all(savePromises)
             .then(() => {
-                alert("تم حفظ التغييرات بنجاح في قاعدة البيانات!");
+                alert("تم حفظ التغييرات وتسجيلها بنجاح!");
+                originalEmployees = JSON.parse(JSON.stringify(employees));
+                originalHolidays = JSON.parse(JSON.stringify(holidays));
                 renderApp();
                 const modal = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
                 modal.hide();
             })
             .catch((error) => {
-                console.error("Error saving data to Firebase:", error);
+                console.error("Error saving data or history to Firebase:", error);
                 alert("حدث خطأ أثناء حفظ التغييرات. يرجى المحاولة مرة أخرى.");
             })
             .finally(() => {
                 saveScheduleBtn.disabled = false; // Re-enable button
+            });
+    }
+
+    function showHistory() {
+        historyModalBody.innerHTML = `<div class="text-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>`;
+        historyModal.show();
+
+        const historyRef = database.ref('history').orderByChild('timestamp').limitToLast(10); // Get last 10 entries
+        historyRef.once('value')
+            .then(snapshot => {
+                if (!snapshot.exists()) {
+                    historyModalBody.innerHTML = '<p class="text-center text-muted">لا يوجد سجل تعديلات لعرضه.</p>';
+                    return;
+                }
+
+                const historyData = snapshot.val();
+                const historyEntries = Object.values(historyData).reverse(); // Newest first
+
+                let historyHtml = '<ul class="list-group list-group-flush">';
+                historyEntries.forEach(entry => {
+                    const date = new Date(entry.timestamp);
+                    const formattedDate = date.toLocaleString('ar-EG', { dateStyle: 'full', timeStyle: 'short' });
+                    historyHtml += `
+                        <li class="list-group-item">
+                            <p class="mb-1 fw-bold text-primary">${formattedDate}</p>
+                            <pre class="mb-0 small bg-light p-2 rounded" style="white-space: pre-wrap;">${entry.description}</pre>
+                        </li>`;
+                });
+                historyHtml += '</ul>';
+                historyModalBody.innerHTML = historyHtml;
+            })
+            .catch(error => {
+                console.error("Error fetching history:", error);
+                historyModalBody.innerHTML = '<div class="alert alert-danger">فشل تحميل سجل التعديلات.</div>';
             });
     }
 
@@ -663,6 +750,9 @@ document.addEventListener('DOMContentLoaded', () => {
     toggleEmployeeTypeColumn.addEventListener('change', updateColumnVisibility);
     toggleSignatureColumn.addEventListener('change', updateColumnVisibility);
 
+    // --- Event Listener for History Button ---
+    showHistoryBtn.addEventListener('click', showHistory);
+
     // --- Event Listener for Holiday Day Selection ---
     holidayDaySelect.addEventListener('change', () => {
         const year = displayedDate.getFullYear();
@@ -670,6 +760,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const selectedDay = holidayDaySelect.value;
         const dateKey = getYYYYMMDD(new Date(year, month, selectedDay));
         holidayInput.value = holidays[dateKey] || '';
+    });
+
+    // Live update for holiday object when user types in the holiday input
+    holidayInput.addEventListener('input', () => {
+        const year = displayedDate.getFullYear();
+        const month = displayedDate.getMonth();
+        const selectedDay = holidayDaySelect.value;
+        const dateKey = getYYYYMMDD(new Date(year, month, selectedDay));
+        const holidayName = holidayInput.value.trim();
+
+        if (holidayName) {
+            holidays[dateKey] = holidayName;
+        } else {
+            delete holidays[dateKey];
+        }
     });
 
     // --- Event Listeners ---
