@@ -22,11 +22,18 @@
       .app-header {
         background-color: #0d6efd;
         color: white;
-        padding: 1rem;
+        padding: 0.75rem 1rem; /* Reduced vertical padding */
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         display: flex;
         justify-content: space-between;
         align-items: center;
+      }
+      .app-header h1 {
+        font-size: 1.1rem; /* Smaller title */
+      }
+      .app-header #current-date {
+        font-size: 0.95rem; /* Larger date */
+        font-weight: 500;
       }
       .app-header .text-center {
         flex-grow: 1;
@@ -43,42 +50,47 @@
       }
       .employee-card {
         position: relative; /* Required for absolute positioning of child */
-        border-radius: 15px;
-        border: 1px solid #ddd; /* Default border for other sides */
-        border-right-width: 5px; /* Make the right border thicker */
+        border-radius: 10px;
+        border: 1px solid #e9ecef;
+        border-top: 4px solid; /* This will be colored by status */
         transition: all 0.2s ease-in-out;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.04);
         cursor: pointer;
+        background-color: #fff;
       }
       .employee-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        transform: translateY(-4px);
+        box-shadow: 0 8px 15px rgba(0, 0, 0, 0.08);
       }
 
       .status-working {
-        border-right-color: #198754; /* Green */
+        border-top-color: #198754; /* Green */
       }
 
       .status-off {
-        border-right-color: #6c757d; /* Grey */
+        border-top-color: #6c757d; /* Grey */
       }
 
       .card-body {
-        padding: 1.25rem;
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start; /* Align items to the top */
+        min-height: 90px;
       }
       .employee-name {
-        font-weight: bold;
-        font-size: 1.2rem;
-        margin-bottom: 0.75rem !important;
+        font-weight: 400;
+        font-size: 0.4rem;
+        margin-bottom: 0 !important; /* Reset margin, container will handle it */
       }
 
       .shift-badge {
         display: inline-block;
-        padding: 0.5rem 1rem;
+        padding: 0.4rem 0.9rem;
         border-radius: 8px;
         font-weight: 500;
         color: white;
-        font-size: 1rem;
+        font-size: 0.9rem;
       }
       .shift-morning {
         background-color: #198754;
@@ -102,14 +114,12 @@
         font-weight: 500;
       }
       .team-indicator {
-        position: absolute;
-        top: 8px;
-        right: 8px;
         padding: 0.1rem 0.3rem; /* Further reduced padding */
         border-radius: 5px;
         color: white;
         font-size: 0.65rem; /* Further reduced font size */
         font-weight: bold;
+        flex-shrink: 0; /* Prevent shrinking */
       }
       .signature-indicator {
         width: 24px;
@@ -136,10 +146,46 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 0.5rem 1.25rem;
-        background-color: transparent;
-        border-top: none;
+        padding: 0.5rem 1rem;
+        background-color: #f8f9fa;
+        border-top: 1px solid #e9ecef;
         min-height: 44px; /* Ensure footer has height even if empty */
+      }
+      .card-title-container {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+        margin-bottom: 0.5rem;
+      }
+
+      /* For clickable day headers in settings modal */
+      .schedule-table th.day-header-clickable {
+        cursor: pointer;
+        transition: background-color 0.2s ease-in-out;
+      }
+      .schedule-table th.day-header-clickable:hover {
+        background-color: #e9ecef; /* A light grey hover effect */
+      }
+
+      /* Day Summary Modal Styles */
+      #daySummaryModal {
+        z-index: 1060; /* Ensure it appears on top of the settings modal (which is 1055) */
+      }
+      .summary-section {
+        margin-bottom: 1rem;
+      }
+      .summary-section h6 {
+        border-bottom: 1px solid #dee2e6;
+        padding-bottom: 0.5rem;
+        margin-bottom: 0.5rem;
+      }
+      .summary-list {
+        list-style-type: none;
+        padding-left: 0;
+      }
+      .summary-list li {
+        padding: 0.25rem 0;
       }
 
       /* Modal styles */
@@ -436,8 +482,8 @@
         &lt;
       </button>
       <div class="text-center">
-        <h1 class="h4 mb-1">Damanhour CSO Schedule</h1>
-        <p id="current-date" class="mb-0 small"></p>
+        <h1 class="mb-1">Damanhour CSO Schedule</h1>
+        <p id="current-date" class="mb-0"></p>
       </div>
       <button
         type="button"
@@ -507,6 +553,32 @@
       </div>
     </div>
 
+    <!-- Day Summary Modal -->
+    <div
+      class="modal fade"
+      id="daySummaryModal"
+      tabindex="-1"
+      aria-labelledby="daySummaryModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="daySummaryModalLabel">ملخص اليوم</h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body" id="daySummaryBody">
+            <!-- Summary content will be generated here by JS -->
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Settings Modal -->
     <div
       class="modal fade"
@@ -537,120 +609,135 @@
             </button>
           </div>
           <div class="modal-body">
-              <div class="row mb-3 p-2 bg-light rounded border">
-                <div class="col-md-6 mb-2 mb-md-0">
-                  <label class="form-label fw-bold"
-                    >توقيت الدوام الصباحي (عام)</label
-                  >
-                  <div class="input-group">
-                    <span class="input-group-text">من</span>
-                    <input
-                      type="time"
-                      id="global-morning-start"
-                      class="form-control"
-                      value="09:00"
-                    />
-                    <span class="input-group-text">إلى</span>
-                    <input
-                      type="time"
-                      id="global-morning-end"
-                      class="form-control"
-                      value="17:00"
-                    />
-                  </div>
-                </div>
-                <div class="col-md-6">
-                  <label class="form-label fw-bold"
-                    >توقيت الدوام المسائي (عام)</label
-                  >
-                  <div class="input-group">
-                    <span class="input-group-text">من</span>
-                    <input
-                      type="time"
-                      id="global-evening-start"
-                      class="form-control"
-                      value="17:00"
-                    />
-                    <span class="input-group-text">إلى</span>
-                    <input
-                      type="time"
-                      id="global-evening-end"
-                      class="form-control"
-                      value="01:00"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div class="row mb-3 p-2 bg-light rounded border">
-                <div class="col-12">
-                  <label class="form-label fw-bold">الإجازات الرسمية للشهر</label>
-                  <div class="input-group">
-                    <select class="form-select" id="holiday-day-select" style="max-width: 120px;">
-                      <!-- الأيام سيتم إضافتها هنا بواسطة JS -->
-                    </select>
-                    <input type="text" id="official-holiday-input" class="form-control" placeholder="أدخل اسم الإجازة هنا" />
-                  </div>
-                  <div class="form-text">اختر يوماً من القائمة وأدخل اسم الإجازة. لحذف إجازة، اختر اليوم وامسح اسم الإجازة.</div>
-                </div>
-              </div>
-
-              <div class="row mb-3 p-2 bg-light rounded border">
-                <div class="col-12">
-                  <label class="form-label fw-bold">إعدادات عرض الأعمدة</label>
-                  <div class="form-check form-check-inline">
-                    <input
-                      class="form-check-input"
-                      type="checkbox"
-                      id="toggle-team-column"
-                    />
-                    <label class="form-check-label" for="toggle-team-column"
-                      >إظهار عمود الفريق</label
-                    >
-                  </div>
-                  <div class="form-check form-check-inline">
-                    <input
-                      class="form-check-input"
-                      type="checkbox"
-                      id="toggle-employee-type-column"
-                    />
-                    <label class="form-check-label" for="toggle-employee-type-column"
-                      >إظهار عمود النوع</label>
-                  </div>
-                  <div class="form-check form-check-inline">
-                    <input
-                      class="form-check-input"
-                      type="checkbox"
-                      id="toggle-signature-column"
-                    />
-                    <label class="form-check-label" for="toggle-signature-column"
-                      >إظهار عمود التوقيع</label
-                    >
-                  </div>
-                </div>
-              </div>
-
-              <div class="d-flex justify-content-end mb-3 gap-2">
-                <button class="btn btn-info" id="export-ibs-leave-btn">
-                  <i class="bi bi-file-earmark-excel"></i> تصدير إجازات IBS
-                </button>
-                <button class="btn btn-success" id="add-employee-btn">
-                  <i class="bi bi-plus-circle"></i> إضافة موظف جديد
-                </button>
-              </div>
-
-              <p class="text-muted small">
-                ملاحظة: يمكنك تحديد وقت مخصص لكل وردية، أو ترك الحقول فارغة لتطبيق
-                التوقيت العام.
-                <strong class="text-primary d-block"
-                  >اليوم الحالي مميز باللون الأزرق.</strong
+            <div class="row mb-3 p-2 bg-light rounded border">
+              <div class="col-md-6 mb-2 mb-md-0">
+                <label class="form-label fw-bold"
+                  >توقيت الدوام الصباحي (عام)</label
                 >
-                <strong class="text-info d-block"
-                  >للتعديل او الحذف اضغط على اسم الموظف</strong
+                <div class="input-group">
+                  <span class="input-group-text">من</span>
+                  <input
+                    type="time"
+                    id="global-morning-start"
+                    class="form-control"
+                    value="09:00"
+                  />
+                  <span class="input-group-text">إلى</span>
+                  <input
+                    type="time"
+                    id="global-morning-end"
+                    class="form-control"
+                    value="17:00"
+                  />
+                </div>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-bold"
+                  >توقيت الدوام المسائي (عام)</label
                 >
-              </p>
+                <div class="input-group">
+                  <span class="input-group-text">من</span>
+                  <input
+                    type="time"
+                    id="global-evening-start"
+                    class="form-control"
+                    value="17:00"
+                  />
+                  <span class="input-group-text">إلى</span>
+                  <input
+                    type="time"
+                    id="global-evening-end"
+                    class="form-control"
+                    value="01:00"
+                  />
+                </div>
+              </div>
+            </div>
 
-              <div class="table-responsive">
+            <div class="row mb-3 p-2 bg-light rounded border">
+              <div class="col-12">
+                <label class="form-label fw-bold">الإجازات الرسمية للشهر</label>
+                <div class="input-group">
+                  <select
+                    class="form-select"
+                    id="holiday-day-select"
+                    style="max-width: 120px"
+                  >
+                    <!-- الأيام سيتم إضافتها هنا بواسطة JS -->
+                  </select>
+                  <input
+                    type="text"
+                    id="official-holiday-input"
+                    class="form-control"
+                    placeholder="أدخل اسم الإجازة هنا"
+                  />
+                </div>
+                <div class="form-text">
+                  اختر يوماً من القائمة وأدخل اسم الإجازة. لحذف إجازة، اختر
+                  اليوم وامسح اسم الإجازة.
+                </div>
+              </div>
+            </div>
+
+            <div class="row mb-3 p-2 bg-light rounded border">
+              <div class="col-12">
+                <label class="form-label fw-bold">إعدادات عرض الأعمدة</label>
+                <div class="form-check form-check-inline">
+                  <input
+                    class="form-check-input"
+                    type="checkbox"
+                    id="toggle-team-column"
+                  />
+                  <label class="form-check-label" for="toggle-team-column"
+                    >إظهار عمود الفريق</label
+                  >
+                </div>
+                <div class="form-check form-check-inline">
+                  <input
+                    class="form-check-input"
+                    type="checkbox"
+                    id="toggle-employee-type-column"
+                  />
+                  <label
+                    class="form-check-label"
+                    for="toggle-employee-type-column"
+                    >إظهار عمود النوع</label
+                  >
+                </div>
+                <div class="form-check form-check-inline">
+                  <input
+                    class="form-check-input"
+                    type="checkbox"
+                    id="toggle-signature-column"
+                  />
+                  <label class="form-check-label" for="toggle-signature-column"
+                    >إظهار عمود التوقيع</label
+                  >
+                </div>
+              </div>
+            </div>
+
+            <div class="d-flex justify-content-end mb-3 gap-2">
+              <button class="btn btn-info" id="export-ibs-leave-btn">
+                <i class="bi bi-file-earmark-excel"></i> تصدير إجازات IBS
+              </button>
+              <button class="btn btn-success" id="add-employee-btn">
+                <i class="bi bi-plus-circle"></i> إضافة موظف جديد
+              </button>
+            </div>
+
+            <p class="text-muted small">
+              ملاحظة: يمكنك تحديد وقت مخصص لكل وردية، أو ترك الحقول فارغة لتطبيق
+              التوقيت العام.
+              <strong class="text-primary d-block"
+                >اليوم الحالي مميز باللون الأزرق.</strong
+              >
+              <strong class="text-info d-block"
+                >للتعديل او الحذف اضغط على اسم الموظف</strong
+              >
+            </p>
+
+            <div class="table-responsive">
               <table
                 class="table table-bordered schedule-table"
                 id="schedule-table"
@@ -662,7 +749,7 @@
                   <!-- Schedule rows will be generated by JS -->
                 </tbody>
               </table>
-              </div>
+            </div>
           </div>
           <div class="modal-footer">
             <button
