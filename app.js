@@ -34,6 +34,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const toggleTeamColumn = document.getElementById('toggle-team-column');
     const toggleSignatureColumn = document.getElementById('toggle-signature-column');
+    const toggleEmployeeTypeColumn = document.getElementById('toggle-employee-type-column');
+    const exportIBSLeaveBtn = document.getElementById('export-ibs-leave-btn');
 
     const addEmployeeBtn = document.getElementById('add-employee-btn');
     const employeeCrudModalEl = document.getElementById('employeeCrudModal');
@@ -67,9 +69,10 @@ document.addEventListener('DOMContentLoaded', () => {
     function fetchData() {
         const employeesRef = database.ref('employees');
         const holidaysRef = database.ref('holidays');
+        const globalSettingsRef = database.ref('globalSettings');
 
-        Promise.all([employeesRef.once('value'), holidaysRef.once('value')])
-            .then(([employeesSnapshot, holidaysSnapshot]) => {
+        Promise.all([employeesRef.once('value'), holidaysRef.once('value'), globalSettingsRef.once('value')])
+            .then(([employeesSnapshot, holidaysSnapshot, settingsSnapshot]) => {
                 const employeesData = employeesSnapshot.val();
                 if (employeesData) {
                     employees = Array.isArray(employeesData) ? employeesData.filter(Boolean) : Object.values(employeesData);
@@ -78,6 +81,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 holidays = holidaysSnapshot.val() || {}; // Get holidays or default to empty object
+
+                // Load global settings and populate the inputs
+                const settingsData = settingsSnapshot.val();
+                if (settingsData && settingsData.shiftTimes) {
+                    document.getElementById('global-morning-start').value = settingsData.shiftTimes.morningStart || '09:00';
+                    document.getElementById('global-morning-end').value = settingsData.shiftTimes.morningEnd || '17:00';
+                    document.getElementById('global-evening-start').value = settingsData.shiftTimes.eveningStart || '17:00';
+                    document.getElementById('global-evening-end').value = settingsData.shiftTimes.eveningEnd || '01:00';
+                }
 
                 renderScheduleModal();
                 updateColumnVisibility();
@@ -171,8 +183,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     <h5 class="card-title employee-name text-start">${employee.name}</h5>
                     <div class="text-center">
                         ${statusBoxHtml}
-                        ${timeHtml}
                     </div>
+                </div>
+                <div class="card-footer">
+                    ${timeHtml}
                     ${signatureIndicatorHtml}
                 </div>
             `;
@@ -236,7 +250,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const dayNames = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
 
         // 1. Create Table Header
-        let headHtml = '<tr><th class="employee-name-col">الموظف</th><th class="team-col">الفريق</th><th class="e-signature-col">توقيع الكتروني</th>';
+        let headHtml = '<tr><th class="employee-name-col">الموظف</th><th class="team-col">الفريق</th><th class="employee-type-col">النوع</th><th class="e-signature-col">توقيع الكتروني</th>';
         for (let i = 1; i <= daysInMonth; i++) {
             const dayOfWeek = new Date(year, month, i).getDay();
             const isToday = (i === today.getDate() && month === today.getMonth() && year === today.getFullYear());
@@ -247,14 +261,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 thClass = 'weekend-day';
             }
 
-            const setterButtonsHtml = `
-                <div class="day-team-setter-container">
-                    <button class="btn btn-sm btn-outline-danger team-day-setter" data-day="${i}" data-team="A">A</button>
-                    <button class="btn btn-sm btn-outline-success team-day-setter" data-day="${i}" data-team="B">B</button>
-                </div>
-            `;
-
-            headHtml += `<th class="${thClass}">${i}<br><small>${dayNames[dayOfWeek]}</small>${setterButtonsHtml}</th>`;
+            headHtml += `<th class="${thClass}">${i}<br><small>${dayNames[dayOfWeek]}</small></th>`;
         }
         headHtml += '</tr>';
         scheduleTableHead.innerHTML = headHtml;
@@ -290,6 +297,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     <option value="Team A" ${employee.team === 'Team A' ? 'selected' : ''}>Team A</option>
                     <option value="Team B" ${employee.team === 'Team B' ? 'selected' : ''}>Team B</option>
                     <option value="Regular" ${employee.team === 'Regular' ? 'selected' : ''}>Regular</option>
+                </select>
+            </td>
+            <td class="employee-type-col">
+                <select class="form-select employee-type-select" data-employee-id="${employee.id}">
+                    <option value="Staff" ${employee.employeeType === 'Staff' || !employee.employeeType ? 'selected' : ''}>Staff</option>
+                    <option value="IBS" ${employee.employeeType === 'IBS' ? 'selected' : ''}>IBS</option>
                 </select>
             </td>
             <td class="e-signature-col">
@@ -370,28 +383,26 @@ document.addEventListener('DOMContentLoaded', () => {
         saveScheduleBtn.disabled = true; // Disable button to prevent multiple clicks
         const savePromises = [];
 
-        // --- 1. Prepare Holiday Data ---
-        const holidayName = holidayInput.value.trim();
-        const selectedDay = holidayDaySelect.value;
-        const year = displayedDate.getFullYear();
-        const month = displayedDate.getMonth();
-        const dateKey = getYYYYMMDD(new Date(year, month, selectedDay));
-        const holidayRef = database.ref(`holidays/${dateKey}`);
+        // --- 1. Save Holidays ---
+        // The local `holidays` object is kept up-to-date by the event listeners.
+        // We just need to save the entire object.
+        savePromises.push(database.ref('holidays').set(holidays));
 
-        if (holidayName) {
-            savePromises.push(holidayRef.set(holidayName));
-            holidays[dateKey] = holidayName; // Update local state
-        } else if (holidays[dateKey]) { // Only remove if it exists
-            savePromises.push(holidayRef.remove());
-            delete holidays[dateKey]; // Update local state
-        }
-
-        // --- 2. Prepare Employee Data ---
+        // --- 2. Save Global Shift Times ---
         const globalMorningStart = document.getElementById('global-morning-start').value;
         const globalMorningEnd = document.getElementById('global-morning-end').value;
         const globalEveningStart = document.getElementById('global-evening-start').value;
         const globalEveningEnd = document.getElementById('global-evening-end').value;
 
+        const globalShiftTimes = {
+            morningStart: globalMorningStart,
+            morningEnd: globalMorningEnd,
+            eveningStart: globalEveningStart,
+            eveningEnd: globalEveningEnd
+        };
+        savePromises.push(database.ref('globalSettings/shiftTimes').set(globalShiftTimes));
+
+        // --- 3. Prepare and Save Employee Data ---
         // Update e-signatures
         const signatureSelects = scheduleTableBody.querySelectorAll('.e-signature-select');
         signatureSelects.forEach(select => {
@@ -409,6 +420,16 @@ document.addEventListener('DOMContentLoaded', () => {
             const employee = employees.find(emp => emp.id === employeeId);
             if (employee) {
                 employee.team = select.value;
+            }
+        });
+
+        // Update employee types
+        const employeeTypeSelects = scheduleTableBody.querySelectorAll('.employee-type-select');
+        employeeTypeSelects.forEach(select => {
+            const employeeId = parseInt(select.dataset.employeeId);
+            const employee = employees.find(emp => emp.id === employeeId);
+            if (employee) {
+                employee.employeeType = select.value;
             }
         });
 
@@ -470,46 +491,61 @@ document.addEventListener('DOMContentLoaded', () => {
             });
     }
 
-    /**
-     * Sets the shift for an entire day based on a selected team.
-     * Employees in the selected team are set to 'morning' with global times, others are set to 'off'.
-     * @param {number} day - The day of the month to set.
-     * @param {string} teamToSet - The team to set as working ('A' or 'B').
-     */
-    function setDayForTeam(day, teamToSet) {
-        const rows = scheduleTableBody.querySelectorAll('tr');
+    function exportIBSLeaveData() {
+        // ملاحظة: بسبب هيكل قاعدة البيانات الحالي، يمكن لهذه الوظيفة فقط تصدير البيانات للشهر المعروض حاليًا في نافذة الإعدادات.
+        // البيانات من الأشهر السابقة يتم الكتابة فوقها عند حفظ شهر جديد.
 
-        rows.forEach(row => {
-            // Find the team select dropdown for this employee
-            const teamSelect = row.querySelector('.team-select');
-            if (!teamSelect) return; // Skip if no team select found (e.g., header row)
+        const year = displayedDate.getFullYear();
+        const month = displayedDate.getMonth(); // 0-11
+        const monthName = displayedDate.toLocaleDateString('ar-EG', { month: 'long' });
 
-            const employeeTeam = teamSelect.value; // e.g., "Team A"
+        console.log(`Starting export for IBS leave data for ${monthName} ${year}...`);
 
-            // Find the status select for the specific day
-            const shiftSelect = row.querySelector(`select.status-select[data-day='${day}']`);
-            if (!shiftSelect) return;
+        const ibsEmployees = employees.filter(emp => emp.employeeType === 'IBS');
 
-            const parentTd = shiftSelect.closest('td');
-            const startTimeInput = parentTd.querySelector('input[name="startTime"]');
-            const endTimeInput = parentTd.querySelector('input[name="endTime"]');
+        if (ibsEmployees.length === 0) {
+            alert('لا يوجد موظفين من نوع IBS لتصدير بياناتهم.');
+            return;
+        }
 
-            // Check if the employee's team is the one to be set for work
-            if (employeeTeam === `Team ${teamToSet}`) {
-                shiftSelect.value = 'morning';
-                // Clear individual time inputs to ensure global times are used on save
-                if (startTimeInput) startTimeInput.value = '';
-                if (endTimeInput) endTimeInput.value = '';
-            } else {
-                shiftSelect.value = 'off';
+        const leaveData = [];
+
+        ibsEmployees.forEach(employee => {
+            // The employee.schedule object contains data for the current month.
+            // The keys are day numbers (1, 2, 3, ...).
+            for (const day in employee.schedule) {
+                if (employee.schedule.hasOwnProperty(day)) {
+                    const scheduleEntry = employee.schedule[day];
+                    if (scheduleEntry && scheduleEntry.status === 'Annual') {
+                        // Construct the full date object
+                        const leaveDate = new Date(year, month, parseInt(day));
+                        leaveData.push({
+                            'اسم الموظف': employee.name,
+                            'تاريخ الإجازة': getYYYYMMDD(leaveDate) // Use existing helper function
+                        });
+                    }
+                }
             }
-
-            // Trigger the 'change' event to update the UI (e.g., show/hide time inputs)
-            shiftSelect.dispatchEvent(new Event('change'));
         });
 
-        console.log(`تم ضبط ورديات يوم ${day} لفريق ${teamToSet} بالتوقيت العام.`);
+        if (leaveData.length === 0) {
+            alert(`لا توجد إجازات "Annual" لموظفي IBS في شهر ${monthName}.`);
+            return;
+        }
+
+        // Use SheetJS to create and download the Excel file.
+        const worksheet = XLSX.utils.json_to_sheet(leaveData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'إجازات IBS');
+
+        // Set column widths (in characters)
+        worksheet['!cols'] = [{ wch: 30 }, { wch: 15 }];
+
+        const fileName = `IBS_Annual_Leave_${year}_${String(month + 1).padStart(2, '0')}.xlsx`;
+        XLSX.writeFile(workbook, fileName);
+        console.log(`Export complete. File: ${fileName}`);
     }
+
     // Event delegation for showing/hiding time inputs in the modal
     scheduleTableBody.addEventListener('change', (e) => {
         if (e.target.classList.contains('status-select')) {
@@ -562,16 +598,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Event delegation for team day setters in the modal header
-    scheduleTableHead.addEventListener('click', (e) => {
-        const setterBtn = e.target.closest('.team-day-setter');
-        if (setterBtn) {
-            const day = setterBtn.dataset.day;
-            const teamToSet = setterBtn.dataset.team;
-            setDayForTeam(parseInt(day), teamToSet);
-        }
-    });
-
     // Event delegation for employee CRUD actions
     scheduleTableBody.addEventListener('click', (e) => {
         const target = e.target;
@@ -602,12 +628,15 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateColumnVisibility() {
         if (!scheduleTable) return;
         scheduleTable.classList.toggle('hide-team', !toggleTeamColumn.checked);
+        scheduleTable.classList.toggle('hide-employee-type', !toggleEmployeeTypeColumn.checked);
         scheduleTable.classList.toggle('hide-signature', !toggleSignatureColumn.checked);
     }
 
     // --- Event Listeners for Column Toggles ---
     toggleTeamColumn.addEventListener('change', updateColumnVisibility);
+    toggleEmployeeTypeColumn.addEventListener('change', updateColumnVisibility);
     toggleSignatureColumn.addEventListener('change', updateColumnVisibility);
+    exportIBSLeaveBtn.addEventListener('click', exportIBSLeaveData);
 
     // --- Event Listener for Holiday Day Selection ---
     holidayDaySelect.addEventListener('change', () => {
@@ -616,6 +645,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const selectedDay = holidayDaySelect.value;
         const dateKey = getYYYYMMDD(new Date(year, month, selectedDay));
         holidayInput.value = holidays[dateKey] || '';
+    });
+
+    // Add an event listener to the holiday input to update the local `holidays` object in real-time.
+    holidayInput.addEventListener('input', () => {
+        const year = displayedDate.getFullYear();
+        const month = displayedDate.getMonth();
+        const selectedDay = holidayDaySelect.value;
+        const dateKey = getYYYYMMDD(new Date(year, month, selectedDay));
+        const holidayName = holidayInput.value.trim();
+
+        if (holidayName) {
+            holidays[dateKey] = holidayName; // Add or update the holiday
+        } else {
+            delete holidays[dateKey]; // Remove the holiday if the input is cleared
+        }
     });
 
     // --- Event Listeners ---
@@ -672,6 +716,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 name: employeeName,
                 team: 'Regular',
                 eSignature: 'no',
+                employeeType: 'Staff', // Default value
                 schedule: {} // Start with an empty schedule
             };
             employees.push(newEmployee);
